@@ -29,6 +29,7 @@ import static org.openmrs.module.queue.web.resources.parser.QueueEntrySearchCrit
 import static org.openmrs.module.queue.web.resources.parser.QueueEntrySearchCriteriaParser.SEARCH_PARAM_HAS_VISIT;
 import static org.openmrs.module.queue.web.resources.parser.QueueEntrySearchCriteriaParser.SEARCH_PARAM_INCLUDE_VOIDED;
 import static org.openmrs.module.queue.web.resources.parser.QueueEntrySearchCriteriaParser.SEARCH_PARAM_IS_ENDED;
+import static org.openmrs.module.queue.web.resources.parser.QueueEntrySearchCriteriaParser.SEARCH_PARAM_LATEST_PER_PATIENT;
 import static org.openmrs.module.queue.web.resources.parser.QueueEntrySearchCriteriaParser.SEARCH_PARAM_LOCATION;
 import static org.openmrs.module.queue.web.resources.parser.QueueEntrySearchCriteriaParser.SEARCH_PARAM_LOCATION_WAITING_FOR;
 import static org.openmrs.module.queue.web.resources.parser.QueueEntrySearchCriteriaParser.SEARCH_PARAM_PATIENT;
@@ -476,6 +477,15 @@ public class QueueEntryResourceTest extends BaseQueueResourceTest<QueueEntry, Qu
 		verify(queueEntryService).getQueueEntries(queueEntryArgumentCaptor.capture());
 		QueueEntrySearchCriteria criteria = queueEntryArgumentCaptor.getValue();
 		assertThat(criteria.getIsEnded(), equalTo(false));
+	}
+	
+	@Test
+	public void shouldSearchQueueEntriesByLatestPerPatient() {
+		parameterMap.put(SEARCH_PARAM_LATEST_PER_PATIENT, new String[] { "true" });
+		resource.doSearch(requestContext);
+		verify(queueEntryService).getQueueEntries(queueEntryArgumentCaptor.capture());
+		QueueEntrySearchCriteria criteria = queueEntryArgumentCaptor.getValue();
+		assertThat(criteria.isLatestPerPatient(), equalTo(true));
 	}
 	
 	@Test

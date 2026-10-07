@@ -377,6 +377,21 @@ public class QueueEntryDaoTest extends BaseModuleContextSensitiveTest {
 	}
 	
 	@Test
+	// patient 100: 1 (16:40, status 3001), 2 (18:40, 3002), 3 (next day, 3002), voided 10 (18:40, 3001); patient 2: 4
+	public void shouldSearchAndCountOnlyEachPatientsLatestQueueEntry() {
+		criteria.setLatestPerPatient(true);
+		assertResults(criteria, 3, 4);
+		// "latest" is judged within the population the other criteria select
+		criteria.setStartedOnOrBefore(date("2022-02-02 18:40:56"));
+		assertResults(criteria, 2);
+		criteria.setStartedOnOrBefore(null);
+		criteria.setStatuses(Collections.singletonList(services.getConceptService().getConcept(3001)));
+		assertResults(criteria, 1);
+		criteria.setIncludedVoided(true);
+		assertResults(criteria, 10);
+	}
+	
+	@Test
 	// 2022-02-02 16:40:56.0, 2022-02-02 18:40:56.0, 2022-02-03 16:40:56.0, 2022-03-02 16:40:56.0
 	public void shouldSearchAndCountQueueEntriesStartedOnOrBeforeDate() {
 		assertNumberOfResults(criteria, 4);

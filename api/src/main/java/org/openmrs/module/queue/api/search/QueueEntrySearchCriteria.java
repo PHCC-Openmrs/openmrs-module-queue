@@ -78,4 +78,10 @@ public class QueueEntrySearchCriteria implements Serializable {
 	private Date endedOn;
 	
 	private boolean includedVoided = false;
+	
+	/**
+	 * If true, only each patient's most recently started entry among those matching the other criteria
+	 * is returned (ties broken by the most recently created entry)
+	 */
+	private boolean latestPerPatient = false;
 }

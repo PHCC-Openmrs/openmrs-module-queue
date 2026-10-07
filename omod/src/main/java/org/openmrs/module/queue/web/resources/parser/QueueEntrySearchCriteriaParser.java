@@ -70,11 +70,14 @@ public class QueueEntrySearchCriteriaParser {
 	
 	public static final String SEARCH_PARAM_INCLUDE_VOIDED = "includedVoided";
 	
+	public static final String SEARCH_PARAM_LATEST_PER_PATIENT = "latestPerPatient";
+	
 	public static final List<String> SEARCH_PARAMETERS = Arrays.asList(SEARCH_PARAM_QUEUE, SEARCH_PARAM_LOCATION,
 	    SEARCH_PARAM_SERVICE, SEARCH_PARAM_PATIENT, SEARCH_PARAM_VISIT, SEARCH_PARAM_HAS_VISIT, SEARCH_PARAM_PRIORITY,
 	    SEARCH_PARAM_STATUS, SEARCH_PARAM_LOCATION_WAITING_FOR, SEARCH_PARAM_PROVIDER_WAITING_FOR,
 	    SEARCH_PARAM_QUEUE_COMING_FROM, SEARCH_PARAM_STARTED_ON_OR_AFTER, SEARCH_PARAM_STARTED_ON_OR_BEFORE,
-	    SEARCH_PARAM_IS_ENDED, SEARCH_PARAM_ENDED_ON_OR_AFTER, SEARCH_PARAM_ENDED_ON_OR_BEFORE, SEARCH_PARAM_INCLUDE_VOIDED);
+	    SEARCH_PARAM_IS_ENDED, SEARCH_PARAM_ENDED_ON_OR_AFTER, SEARCH_PARAM_ENDED_ON_OR_BEFORE, SEARCH_PARAM_INCLUDE_VOIDED,
+	    SEARCH_PARAM_LATEST_PER_PATIENT);
 	
 	private final QueueServicesWrapper services;
 	
@@ -189,6 +192,10 @@ public class QueueEntrySearchCriteriaParser {
 				}
 				case SEARCH_PARAM_INCLUDE_VOIDED: {
 					criteria.setIncludedVoided(Boolean.parseBoolean(parameterMap.get(SEARCH_PARAM_INCLUDE_VOIDED)[0]));
+					break;
+				}
+				case SEARCH_PARAM_LATEST_PER_PATIENT: {
+					criteria.setLatestPerPatient(Boolean.parseBoolean(parameterMap.get(SEARCH_PARAM_LATEST_PER_PATIENT)[0]));
 					break;
 				}
 				default: {

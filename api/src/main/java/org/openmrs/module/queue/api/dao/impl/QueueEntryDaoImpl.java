@@ -18,13 +18,17 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.function.BiFunction;
 
 import org.hibernate.Criteria;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
+import org.hibernate.criterion.Criterion;
+import org.hibernate.criterion.DetachedCriteria;
 import org.hibernate.criterion.Order;
 import org.hibernate.criterion.Projections;
 import org.hibernate.criterion.Restrictions;
+import org.hibernate.criterion.Subqueries;
 import org.openmrs.Patient;
 import org.openmrs.module.queue.api.dao.QueueEntryDao;
 import org.openmrs.module.queue.api.search.QueueEntrySearchCriteria;
@@ -147,33 +151,76 @@ public class QueueEntryDaoImpl extends AbstractBaseQueueDaoImpl<QueueEntry> impl
 	private Criteria createCriteriaFromSearchCriteria(QueueEntrySearchCriteria searchCriteria) {
 		Criteria c = getCurrentSession().createCriteria(QueueEntry.class, "qe");
 		c.createAlias("queue", "q");
-		includeVoidedObjects(c, searchCriteria.isIncludedVoided());
-		limitByCollectionProperty(c, "queue", searchCriteria.getQueues());
-		limitByCollectionProperty(c, "q.location", searchCriteria.getLocations());
-		limitByCollectionProperty(c, "q.service", searchCriteria.getServices());
-		limitToEqualsProperty(c, "qe.patient", searchCriteria.getPatient());
-		limitToEqualsProperty(c, "qe.visit", searchCriteria.getVisit());
-		limitByCollectionProperty(c, "qe.priority", searchCriteria.getPriorities());
-		limitByCollectionProperty(c, "qe.status", searchCriteria.getStatuses());
-		limitByCollectionProperty(c, "qe.locationWaitingFor", searchCriteria.getLocationsWaitingFor());
-		limitByCollectionProperty(c, "qe.providerWaitingFor", searchCriteria.getProvidersWaitingFor());
-		limitByCollectionProperty(c, "qe.queueComingFrom", searchCriteria.getQueuesComingFrom());
-		limitToGreaterThanOrEqualToProperty(c, "qe.startedAt", searchCriteria.getStartedOnOrAfter());
-		limitToLessThanOrEqualToProperty(c, "qe.startedAt", searchCriteria.getStartedOnOrBefore());
-		limitToEqualsProperty(c, "qe.startedAt", searchCriteria.getStartedOn());
-		limitToGreaterThanOrEqualToProperty(c, "qe.endedAt", searchCriteria.getEndedOnOrAfter());
-		limitToLessThanOrEqualToProperty(c, "qe.endedAt", searchCriteria.getEndedOnOrBefore());
-		limitToEqualsProperty(c, "qe.endedAt", searchCriteria.getEndedOn());
-		if (searchCriteria.getHasVisit() == Boolean.TRUE) {
-			c.add(Restrictions.isNotNull("qe.visit"));
-		} else if (searchCriteria.getHasVisit() == Boolean.FALSE) {
-			c.add(Restrictions.isNull("qe.visit"));
-		}
-		if (searchCriteria.getIsEnded() == Boolean.TRUE) {
-			c.add(Restrictions.isNotNull("qe.endedAt"));
-		} else if (searchCriteria.getIsEnded() == Boolean.FALSE) {
-			c.add(Restrictions.isNull("qe.endedAt"));
+		toRestrictions(searchCriteria, "qe", "q").forEach(c::add);
+		if (searchCriteria.isLatestPerPatient()) {
+			// Keep an entry only if no other entry for the same patient that matches the same criteria
+			// started after it (ties broken by id, so exactly one entry survives per patient). The
+			// subquery repeats every restriction so "latest" is judged within the requested population.
+			DetachedCriteria later = DetachedCriteria.forClass(QueueEntry.class, "later");
+			later.createAlias("later.queue", "laterQueue");
+			toRestrictions(searchCriteria, "later", "laterQueue").forEach(later::add);
+			later.add(Restrictions.eqProperty("later.patient", "qe.patient"));
+			later.add(Restrictions.or(Restrictions.gtProperty("later.startedAt", "qe.startedAt"),
+			    Restrictions.and(Restrictions.eqProperty("later.startedAt", "qe.startedAt"),
+			        Restrictions.gtProperty("later.queueEntryId", "qe.queueEntryId"))));
+			later.setProjection(Projections.id());
+			c.add(Subqueries.notExists(later));
 		}
 		return c;
+	}
+	
+	/**
+	 * The restrictions the given {@link QueueEntrySearchCriteria} describes, expressed against the
+	 * given aliases for the queue entry and its queue, so they can be applied to both the main query
+	 * and the latest-per-patient subquery
+	 */
+	private List<Criterion> toRestrictions(QueueEntrySearchCriteria searchCriteria, String qe, String q) {
+		List<Criterion> restrictions = new ArrayList<>();
+		if (!searchCriteria.isIncludedVoided()) {
+			restrictions.add(Restrictions.eq(qe + ".voided", false));
+		}
+		addCollectionRestriction(restrictions, qe + ".queue", searchCriteria.getQueues());
+		addCollectionRestriction(restrictions, q + ".location", searchCriteria.getLocations());
+		addCollectionRestriction(restrictions, q + ".service", searchCriteria.getServices());
+		addRestriction(restrictions, qe + ".patient", searchCriteria.getPatient(), Restrictions::eq);
+		addRestriction(restrictions, qe + ".visit", searchCriteria.getVisit(), Restrictions::eq);
+		addCollectionRestriction(restrictions, qe + ".priority", searchCriteria.getPriorities());
+		addCollectionRestriction(restrictions, qe + ".status", searchCriteria.getStatuses());
+		addCollectionRestriction(restrictions, qe + ".locationWaitingFor", searchCriteria.getLocationsWaitingFor());
+		addCollectionRestriction(restrictions, qe + ".providerWaitingFor", searchCriteria.getProvidersWaitingFor());
+		addCollectionRestriction(restrictions, qe + ".queueComingFrom", searchCriteria.getQueuesComingFrom());
+		addRestriction(restrictions, qe + ".startedAt", searchCriteria.getStartedOnOrAfter(), Restrictions::ge);
+		addRestriction(restrictions, qe + ".startedAt", searchCriteria.getStartedOnOrBefore(), Restrictions::le);
+		addRestriction(restrictions, qe + ".startedAt", searchCriteria.getStartedOn(), Restrictions::eq);
+		addRestriction(restrictions, qe + ".endedAt", searchCriteria.getEndedOnOrAfter(), Restrictions::ge);
+		addRestriction(restrictions, qe + ".endedAt", searchCriteria.getEndedOnOrBefore(), Restrictions::le);
+		addRestriction(restrictions, qe + ".endedAt", searchCriteria.getEndedOn(), Restrictions::eq);
+		if (searchCriteria.getHasVisit() == Boolean.TRUE) {
+			restrictions.add(Restrictions.isNotNull(qe + ".visit"));
+		} else if (searchCriteria.getHasVisit() == Boolean.FALSE) {
+			restrictions.add(Restrictions.isNull(qe + ".visit"));
+		}
+		if (searchCriteria.getIsEnded() == Boolean.TRUE) {
+			restrictions.add(Restrictions.isNotNull(qe + ".endedAt"));
+		} else if (searchCriteria.getIsEnded() == Boolean.FALSE) {
+			restrictions.add(Restrictions.isNull(qe + ".endedAt"));
+		}
+		return restrictions;
+	}
+	
+	private void addRestriction(List<Criterion> restrictions, String property, Object value,
+	        BiFunction<String, Object, Criterion> restriction) {
+		if (value != null) {
+			restrictions.add(restriction.apply(property, value));
+		}
+	}
+	
+	/**
+	 * A null collection does not limit; an empty one limits to entries where the property is null
+	 */
+	private void addCollectionRestriction(List<Criterion> restrictions, String property, Collection<?> values) {
+		if (values != null) {
+			restrictions.add(values.isEmpty() ? Restrictions.isNull(property) : Restrictions.in(property, values));
+		}
 	}
 }

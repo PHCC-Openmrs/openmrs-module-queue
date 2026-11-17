@@ -11,10 +11,13 @@ package org.openmrs.module.queue.api.dao;
 
 import javax.validation.constraints.NotNull;
 
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 
+import org.openmrs.Patient;
 import org.openmrs.module.queue.api.search.QueueEntrySearchCriteria;
+import org.openmrs.module.queue.model.Queue;
 import org.openmrs.module.queue.model.QueueEntry;
 
 public interface QueueEntryDao extends BaseQueueDao<QueueEntry> {
@@ -31,6 +34,14 @@ public interface QueueEntryDao extends BaseQueueDao<QueueEntry> {
 	Long getCountOfQueueEntries(@NotNull QueueEntrySearchCriteria searchCriteria);
 	
 	List<QueueEntry> getOverlappingQueueEntries(@NotNull QueueEntrySearchCriteria searchCriteria);
+	
+	/**
+	 * @return the non-voided queue entries of any of the given patients, in any of the given queues,
+	 *         that ended at any of the given times - in one query, so the previous entries of a whole
+	 *         page of queue entries can be resolved at once. Empty if any of the collections is empty.
+	 */
+	List<QueueEntry> getQueueEntriesEndedAt(@NotNull Collection<Patient> patients, @NotNull Collection<Queue> queues,
+	        @NotNull Collection<Date> endedAts);
 	
 	/**
 	 * Flushes the current session to ensure pending changes are persisted to the database.

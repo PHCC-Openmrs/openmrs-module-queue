@@ -89,6 +89,7 @@ import org.openmrs.module.webservices.rest.web.representation.CustomRepresentati
 import org.openmrs.module.webservices.rest.web.representation.DefaultRepresentation;
 import org.openmrs.module.webservices.rest.web.representation.FullRepresentation;
 import org.openmrs.module.webservices.rest.web.representation.RefRepresentation;
+import org.openmrs.module.webservices.rest.web.representation.Representation;
 import org.openmrs.module.webservices.rest.web.response.ConversionException;
 
 @ExtendWith(MockitoExtension.class)
@@ -509,6 +510,16 @@ public class QueueEntryResourceTest extends BaseQueueResourceTest<QueueEntry, Qu
 	@Test
 	public void shouldInstantiateNewDelegate() {
 		assertThat(getResource().newDelegate(), notNullValue());
+	}
+	
+	@Test
+	public void shouldResolvePreviousQueueEntriesUpFrontOnlyForRepresentationsThatIncludeThem() {
+		assertThat(QueueEntryResource.includesPreviousQueueEntry(Representation.DEFAULT), is(true));
+		assertThat(QueueEntryResource.includesPreviousQueueEntry(Representation.FULL), is(true));
+		assertThat(QueueEntryResource.includesPreviousQueueEntry(Representation.REF), is(false));
+		assertThat(QueueEntryResource.includesPreviousQueueEntry(
+		    new CustomRepresentation("custom:(uuid,previousQueueEntry:(uuid,startedAt))")), is(true));
+		assertThat(QueueEntryResource.includesPreviousQueueEntry(new CustomRepresentation("custom:(uuid)")), is(false));
 	}
 	
 	@Test

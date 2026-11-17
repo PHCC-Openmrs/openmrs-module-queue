@@ -31,6 +31,7 @@ import org.openmrs.module.queue.api.QueueServicesWrapper;
 import org.openmrs.module.queue.api.search.QueueEntrySearchCriteria;
 import org.openmrs.module.queue.model.QueueEntry;
 import org.openmrs.module.queue.web.resources.parser.QueueEntrySearchCriteriaParser;
+import org.openmrs.module.webservices.rest.SimpleObject;
 import org.openmrs.module.webservices.rest.web.RequestContext;
 import org.openmrs.module.webservices.rest.web.RestConstants;
 import org.openmrs.module.webservices.rest.web.annotation.PropertyGetter;
@@ -40,6 +41,7 @@ import org.openmrs.module.webservices.rest.web.representation.DefaultRepresentat
 import org.openmrs.module.webservices.rest.web.representation.FullRepresentation;
 import org.openmrs.module.webservices.rest.web.representation.RefRepresentation;
 import org.openmrs.module.webservices.rest.web.representation.Representation;
+import org.openmrs.module.webservices.rest.web.resource.api.Converter;
 import org.openmrs.module.webservices.rest.web.resource.api.PageableResult;
 import org.openmrs.module.webservices.rest.web.resource.impl.DelegatingCrudResource;
 import org.openmrs.module.webservices.rest.web.resource.impl.DelegatingResourceDescription;
@@ -112,7 +114,42 @@ public class QueueEntryResource extends DelegatingCrudResource<QueueEntry> {
 		Map<String, String[]> parameters = requestContext.getRequest().getParameterMap();
 		QueueEntrySearchCriteria criteria = getSearchCriteriaParser().constructFromRequest(parameters);
 		List<QueueEntry> queueEntries = getServices().getQueueEntryService().getQueueEntries(criteria);
-		return new NeedsPaging<>(queueEntries, requestContext);
+		return new NeedsPaging<QueueEntry>(queueEntries, requestContext) {
+			
+			@Override
+			public SimpleObject toSimpleObject(Converter preferredConverter) throws ResponseException {
+				if (!includesPreviousQueueEntry(context.getRepresentation())) {
+					return super.toSimpleObject(preferredConverter);
+				}
+				// previousQueueEntry is searched for, not stored, so serializing a page used to run one
+				// search per entry; resolve the whole page's with one query up front instead
+				previousQueueEntriesOfPage
+				        .set(getServices().getQueueEntryService().getPreviousQueueEntries(getPageOfResults()));
+				try {
+					return super.toSimpleObject(preferredConverter);
+				}
+				finally {
+					previousQueueEntriesOfPage.remove();
+				}
+			}
+		};
+	}
+	
+	/**
+	 * The previous queue entries of the page of search results being serialized on this thread, keyed
+	 * by queue entry id; set only while that page is converted
+	 */
+	private static final ThreadLocal<Map<Integer, QueueEntry>> previousQueueEntriesOfPage = new ThreadLocal<>();
+	
+	/**
+	 * Whether serializing in the given representation reads previousQueueEntry (the ref representation
+	 * doesn't, nor does a custom one that doesn't name it)
+	 */
+	static boolean includesPreviousQueueEntry(Representation representation) {
+		if (representation instanceof CustomRepresentation) {
+			return ((CustomRepresentation) representation).getRepresentation().contains("previousQueueEntry");
+		}
+		return representation instanceof DefaultRepresentation || representation instanceof FullRepresentation;
 	}
 	
 	@Override
@@ -287,6 +324,10 @@ public class QueueEntryResource extends DelegatingCrudResource<QueueEntry> {
 	
 	@PropertyGetter("previousQueueEntry")
 	public QueueEntry getPreviousQueueEntry(QueueEntry queueEntry) {
+		Map<Integer, QueueEntry> previousQueueEntries = previousQueueEntriesOfPage.get();
+		if (previousQueueEntries != null && previousQueueEntries.containsKey(queueEntry.getQueueEntryId())) {
+			return previousQueueEntries.get(queueEntry.getQueueEntryId());
+		}
 		return getServices().getQueueEntryService().getPreviousQueueEntry(queueEntry);
 	}
 	

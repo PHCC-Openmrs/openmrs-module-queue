@@ -102,6 +102,20 @@ public class QueueEntryDaoImpl extends AbstractBaseQueueDaoImpl<QueueEntry> impl
 	}
 	
 	@Override
+	public List<QueueEntry> getQueueEntriesEndedAt(Collection<Patient> patients, Collection<Queue> queues,
+	        Collection<Date> endedAts) {
+		if (patients.isEmpty() || queues.isEmpty() || endedAts.isEmpty()) {
+			return new ArrayList<>();
+		}
+		Criteria c = getCurrentSession().createCriteria(QueueEntry.class, "qe");
+		c.add(Restrictions.eq("qe.voided", false));
+		c.add(Restrictions.in("qe.patient", patients));
+		c.add(Restrictions.in("qe.queue", queues));
+		c.add(Restrictions.in("qe.endedAt", endedAts));
+		return c.list();
+	}
+	
+	@Override
 	public void flushSession() {
 		getSessionFactory().getCurrentSession().flush();
 	}

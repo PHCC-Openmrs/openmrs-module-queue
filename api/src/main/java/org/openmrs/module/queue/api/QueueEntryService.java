@@ -11,8 +11,10 @@ package org.openmrs.module.queue.api;
 
 import javax.validation.constraints.NotNull;
 
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.openmrs.Location;
@@ -72,6 +74,19 @@ public interface QueueEntryService {
 	 */
 	@Authorized(PrivilegeConstants.GET_QUEUE_ENTRIES)
 	QueueEntry getPreviousQueueEntry(@NotNull QueueEntry queueEntry);
+	
+	/**
+	 * Resolves {@link #getPreviousQueueEntry(QueueEntry)} for many queue entries with a single query,
+	 * instead of one query each.
+	 *
+	 * @param queueEntries the (saved) queue entries to resolve the previous entries of
+	 * @return the previous queue entry of each given entry, keyed by queue entry id, with a null value
+	 *         for an entry that has none. An entry that {@link #getPreviousQueueEntry(QueueEntry)}
+	 *         would throw for (several previous entries match) is left out, so a caller that falls back
+	 *         to that method for missing keys keeps its behaviour.
+	 */
+	@Authorized(PrivilegeConstants.GET_QUEUE_ENTRIES)
+	Map<Integer, QueueEntry> getPreviousQueueEntries(@NotNull Collection<QueueEntry> queueEntries);
 	
 	/**
 	 * Saves a queue entry

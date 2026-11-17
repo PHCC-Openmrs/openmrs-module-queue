@@ -17,10 +17,17 @@ import javax.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -317,5 +324,58 @@ public class QueueEntryServiceImpl extends BaseOpenmrsService implements QueueEn
 		} else {
 			return null;
 		}
+	}
+	
+	@Override
+	@Transactional(readOnly = true)
+	public Map<Integer, QueueEntry> getPreviousQueueEntries(@NotNull Collection<QueueEntry> queueEntries) {
+		Map<Integer, QueueEntry> previousEntries = new HashMap<>();
+		List<QueueEntry> entriesComingFromAQueue = new ArrayList<>();
+		Set<Patient> patients = new HashSet<>();
+		Set<Queue> queuesComingFrom = new HashSet<>();
+		Set<Date> startTimes = new HashSet<>();
+		for (QueueEntry queueEntry : queueEntries) {
+			if (queueEntry.getQueueComingFrom() == null) {
+				previousEntries.put(queueEntry.getQueueEntryId(), null);
+			} else if (queueEntry.getStartedAt() != null) {
+				// an entry without a start time is left to getPreviousQueueEntry, whose search then
+				// doesn't restrict the end time at all
+				entriesComingFromAQueue.add(queueEntry);
+				patients.add(queueEntry.getPatient());
+				queuesComingFrom.add(queueEntry.getQueueComingFrom());
+				startTimes.add(queueEntry.getStartedAt());
+			}
+		}
+		if (entriesComingFromAQueue.isEmpty()) {
+			return previousEntries;
+		}
+		
+		// The same match getPreviousQueueEntry's search makes, applied in memory to every candidate
+		List<QueueEntry> candidates = dao.getQueueEntriesEndedAt(patients, queuesComingFrom, startTimes);
+		for (QueueEntry queueEntry : entriesComingFromAQueue) {
+			List<QueueEntry> matches = new ArrayList<>();
+			for (QueueEntry candidate : candidates) {
+				if (isPreviousQueueEntry(candidate, queueEntry)) {
+					matches.add(candidate);
+				}
+			}
+			if (matches.size() <= 1) {
+				previousEntries.put(queueEntry.getQueueEntryId(), matches.isEmpty() ? null : matches.get(0));
+			}
+		}
+		return previousEntries;
+	}
+	
+	/**
+	 * Whether the candidate is a previous queue entry of the given entry, as getPreviousQueueEntry
+	 * defines it: same patient and (if the entry has one) visit, in the queue the entry came from,
+	 * ending when the entry started
+	 */
+	private static boolean isPreviousQueueEntry(QueueEntry candidate, QueueEntry queueEntry) {
+		return Objects.equals(candidate.getPatient().getPatientId(), queueEntry.getPatient().getPatientId())
+		        && Objects.equals(candidate.getQueue().getQueueId(), queueEntry.getQueueComingFrom().getQueueId())
+		        && candidate.getEndedAt() != null && candidate.getEndedAt().getTime() == queueEntry.getStartedAt().getTime()
+		        && (queueEntry.getVisit() == null || (candidate.getVisit() != null
+		                && Objects.equals(candidate.getVisit().getVisitId(), queueEntry.getVisit().getVisitId())));
 	}
 }

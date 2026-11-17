@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.Before;
@@ -389,6 +390,24 @@ public class QueueEntryDaoTest extends BaseModuleContextSensitiveTest {
 		assertResults(criteria, 1);
 		criteria.setIncludedVoided(true);
 		assertResults(criteria, 10);
+	}
+	
+	@Test
+	// entry 2 (queue 2, coming from queue 1) started when entry 1 (queue 1, same patient and visit) ended
+	public void shouldResolveThePreviousQueueEntriesOfManyEntriesAsGetPreviousQueueEntryDoes() {
+		criteria.setIncludedVoided(true);
+		List<QueueEntry> queueEntries = dao.getQueueEntries(criteria);
+		assertThat(queueEntries, hasSize(5));
+		
+		Map<Integer, QueueEntry> previousEntries = services.getQueueEntryService().getPreviousQueueEntries(queueEntries);
+		
+		assertThat(previousEntries.size(), is(5));
+		assertThat(previousEntries.get(2).getQueueEntryId(), is(1));
+		for (QueueEntry queueEntry : queueEntries) {
+			assertThat(previousEntries.get(queueEntry.getQueueEntryId()),
+			    is(services.getQueueEntryService().getPreviousQueueEntry(queueEntry)));
+		}
+		assertThat(services.getQueueEntryService().getPreviousQueueEntries(Collections.emptyList()).isEmpty(), is(true));
 	}
 	
 	@Test
